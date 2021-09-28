@@ -1,72 +1,40 @@
-"use strict";
+const _path = _interopRequireDefault(require('path'));
 
-const {
-  remote
-} = require('electron');
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-const path = require('path');
+module.exports = (Ferdi, settings) => {
+  const getMessages = () => {
+    let count = 0;
+    let indirectCount = 0;
 
-const webContents = remote.getCurrentWebContents();
-const {
-  session
-} = webContents;
-window.addEventListener('beforeunload', async () => {
-  try {
-    session.flushStorageData();
-    session.clearStorageData({
-      storages: ['appcache', 'serviceworkers', 'cachestorage', 'websql', 'indexdb']
-    });
-    const registrations = await window.navigator.serviceWorker.getRegistrations();
-    registrations.forEach(r => {
-      r.unregister();
-      console.log('ServiceWorker unregistered');
-    });
-  } catch (err) {
-    console.err(err);
-  }
-});
-
-module.exports = Franz => {
-  const getMessages = function getMessages() {
-    const elements = document.querySelectorAll('._31gEB, .CxUIE, .unread, ._0LqQ, .m61XR, .ZKn2B, .VOr2j');
-    var count = 0;
-  	var indirectCount = 0;
-
-    // Old busted way
-    // for (var i = 0; i < elements.length; i += 1) {
-  	//   var countValue = parseInt(elements[i].textContent || '0', 10);
-    // 
-    //   if (elements[i].parentNode.previousElementSibling === null || elements[i].parentNode.previousElementSibling.querySelectorAll("[data-icon=muted]").length === 0) {
-    //     count += countValue;
-    //   } 
-  	//   else {
-	  //     indirectCount += countValue;
-  	//   }
-    // }
-
-    // Fix Attempt 1: Get the unread from document.title
-    // let countMatches = /\((\d)\) /s.exec(document.title);
-    // count = countMatches?.length==2 ? parseInt(countMatches[1]) : 0; 
-    
-    // Fix Attempt 2: transverse dom and find the unread messages that way.
-    var parentChatElem = document.querySelector("#pane-side").children[0].children[0].children[0];
-    var chatElems = parentChatElem.children;
-    for (var i = 0; i < chatElems.length; i++) {
-      var chatElem = chatElems[i];
-      var unreadElem = chatElem.children[0].children[0].children[1].children[1].children[1];
-      
-      var countValue = parseInt(unreadElem.textContent) || 0; // Returns 0 in case of isNaN
-      
-      if (unreadElem.querySelectorAll("[data-icon=muted]").length === 0) {
-        count += countValue;
-      } else {
-        indirectCount += countValue;
-    	}
+    const parentChatElem = Array.from(document.querySelectorAll('div[aria-label]'))
+                           .sort((a, b) => (a.offsetHeight < b.offsetHeight) ? 1 : -1)[0];
+    if (!parentChatElem) {
+      return;
     }
-    
-    Franz.setBadge(count, indirectCount);
+
+    const unreadSpans = parentChatElem.querySelectorAll('span[aria-label]');
+    for (let i = 0; i < unreadSpans.length; i++) {
+      const unreadElem = unreadSpans[i];
+      const countValue = Ferdi.safeParseInt(unreadElem.textContent);
+      if (countValue > 0) {
+        if (!unreadElem.parentNode.previousSibling || unreadElem.parentNode.previousSibling.querySelectorAll('[data-icon=muted]').length === 0) {
+          count += countValue;
+        } else {
+          indirectCount += countValue;
+        }
+      }
+    }
+
+    Ferdi.setBadge(count, indirectCount);
   };
 
-  Franz.injectCSS(path.join(__dirname, 'service.css'));
-  Franz.loop(getMessages);
+  window.addEventListener('beforeunload', async () => {
+    Ferdi.clearStorageData(settings.id, { storages: ['appcache', 'serviceworkers', 'cachestorage', 'websql', 'indexdb'] });
+    Ferdi.releaseServiceWorkers();
+  });
+
+  Ferdi.loop(getMessages);
+
+  Ferdi.injectCSS(_path.default.join(__dirname, 'service.css'));
 };
